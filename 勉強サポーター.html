@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>勉強記録アプリ（説明ポップアップ付き）</title>
+  <style>
+    body { font-family: 'Yu Gothic', sans-serif; padding: 20px; background: #f9f9f9; color: #333; max-width: 700px; margin: auto; }
+    h1 { color: #007acc; margin-bottom: 10px; }
+    button, .submit-btn {
+      background: #007acc;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      padding: 10px 20px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background 0.3s;
+    }
+    button:hover, .submit-btn:hover { background: #005f99; }
+    form { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 0 8px rgba(0,0,0,0.1); margin-top: 20px; }
+    label { display: block; margin: 10px 0 5px; }
+    input, select, textarea { width: 100%; padding: 8px; border-radius: 5px; border: 1px solid #ccc; }
+    table { width: 100%; border-collapse: collapse; background: white; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+    th { background: #007acc; color: white; }
+    .total { font-weight: bold; font-size: 1.1em; margin-top: 15px; }
+
+    #popup {
+      display: none;
+      position: fixed;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 90%; max-width: 500px;
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.3);
+      padding: 20px;
+      z-index: 1000;
+    }
+    #popup h2 { margin-top: 0; color: #007acc; }
+    #popup ul, #popup ol { margin-left: 20px; }
+    #popup p, #popup li { line-height: 1.5; }
+    #popup button.close-btn {
+      margin-top: 20px;
+      background: #cc3333;
+      border: none;
+      color: white;
+      padding: 10px 15px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: bold;
+      float: right;
+    }
+    #overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right:0; bottom: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 900;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>勉強記録アプリ</h1>
+  <button id="showHelpBtn">使い方を見る</button>
+
+  <form id="studyForm">
+    <label for="date">日付</label>
+    <input type="date" id="date" required />
+
+    <label for="subject">教科</label>
+    <select id="subject" required>
+      <option value="">選んでくださ</option>
+      <option>数学</option>
+      <option>英語</option>
+      <option>理科</option>
+      <option>社会</option>
+      <option>国語</option>
+      <option>プログラミング</option>
+      <option>その他</option>
+    </select>
+
+    <label for="time">勉強時間（分）</label>
+    <input type="number" id="time" min="1" required />
+
+    <label for="memo">メモ</label>
+    <textarea id="memo" rows="2" placeholder="勉強した内容とか"></textarea>
+
+    <button type="submit" class="submit-btn">記録</button>
+  </form>
+
+  <table id="recordTable">
+    <thead>
+      <tr>
+        <th>日付</th>
+        <th>教科</th>
+        <th>時間（分）</th>
+        <th>メモ</th>
+        <th>削除</th>
+      </tr>
+    </thead>
+    <tbody>
+    
+    </tbody>
+  </table>
+
+  <div class="total" id="totalTime">合計時間: 0 分</div>
+
+
+  <div id="overlay"></div>
+  <div id="popup">
+    <h2>使い方</h2>
+    <ol>
+      <li><strong>勉強内容を入力</strong><br>
+          ・日付を選択<br>
+          ・教科を選択<br>
+          ・勉強時間（分）を入力<br>
+          ・メモに勉強内容を書く<br>
+          そのあと「記録するで！」ボタンを押すだけです。</li>
+      <li><strong>記録を見る</strong><br>
+          入力した記録が表に表示され、合計時間も自動計算されます。</li>
+      <li><strong>記録を削除する</strong><br>
+          不要な記録は表の「✖」ボタンで削除できます。</li>
+    </ol>
+    <h3>注意点</h3>
+    <ul>
+      <li>記録はブラウザのローカルストレージに保存されます。</li>
+      <li>同じ端末・同じブラウザで使ってください。</li>
+      <li>ブラウザの設定やキャッシュクリアでデータが消えることがあります。</li>
+      <li>他の端末やブラウザにデータは移せません。</li>
+    </ul>
+    <button class="close-btn" id="closeHelpBtn">閉じる</button>
+  </div>
+
+  <script>
+    const form = document.getElementById('studyForm');
+    const tableBody = document.querySelector('#recordTable tbody');
+    const totalTimeDisplay = document.getElementById('totalTime');
+    const showHelpBtn = document.getElementById('showHelpBtn');
+    const closeHelpBtn = document.getElementById('closeHelpBtn');
+    const popup = document.getElementById('popup');
+    const overlay = document.getElementById('overlay');
+
+    let records = JSON.parse(localStorage.getItem('studyRecords')) || [];
+
+    function saveRecords() {
+      localStorage.setItem('studyRecords', JSON.stringify(records));
+    }
+
+    function updateTable() {
+      tableBody.innerHTML = '';
+      let total = 0;
+
+      records.forEach((rec, index) => {
+        const tr = document.createElement('tr');
+
+        tr.innerHTML = `
+          <td>${rec.date}</td>
+          <td>${rec.subject}</td>
+          <td>${rec.time}</td>
+          <td>${rec.memo}</td>
+          <td><button data-index="${index}">✖</button></td>
+        `;
+
+        tableBody.appendChild(tr);
+        total += Number(rec.time);
+      });
+
+      totalTimeDisplay.textContent = `合計時間: ${total} 分`;
+
+      tableBody.querySelectorAll('button').forEach(btn => {
+        btn.addEventListener('click', e => {
+          const idx = e.target.getAttribute('data-index');
+          records.splice(idx, 1);
+          saveRecords();
+          updateTable();
+        });
+      });
+    }
+
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      const date = form.date.value;
+      const subject = form.subject.value;
+      const time = form.time.value;
+      const memo = form.memo.value;
+
+      records.push({ date, subject, time, memo });
+      saveRecords();
+      updateTable();
+
+      form.reset();
+    });
+
+    showHelpBtn.addEventListener('click', () => {
+      popup.style.display = 'block';
+      overlay.style.display = 'block';
+    });
+
+    closeHelpBtn.addEventListener('click', () => {
+      popup.style.display = 'none';
+      overlay.style.display = 'none';
+    });
+
+    overlay.addEventListener('click', () => {
+      popup.style.display = 'none';
+      overlay.style.display = 'none';
+    });
+
+
+    updateTable();
+  </script>
+
+</body>
+</html>
